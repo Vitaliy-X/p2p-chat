@@ -27,9 +27,9 @@ func TestStartChatPublishesInputLine(t *testing.T) {
 	user := User{ID: mustDecodePeerID(t), Username: "alice"}
 	var out bytes.Buffer
 
-	startChat(context.Background(), strings.NewReader("hello\n"), publisher, "general", user, discardLogger(), &out)
+	startChat(context.Background(), strings.NewReader("hello\n"), publisher, NewNoopStore(), NewMessageDeduper(8), "general", user, discardLogger(), &out)
 
-	if got, want := out.String(), "P2P chat launched\n"; got != want {
+	if got, want := out.String(), "P2P chat launched\nalice: hello\n"; got != want {
 		t.Fatalf("out = %q, want %q", got, want)
 	}
 	if len(publisher.messages) != 1 {
@@ -54,7 +54,7 @@ func TestStartChatDoesNotPublishPartialLineOnEOF(t *testing.T) {
 	publisher := &fakePublisher{}
 	user := User{ID: mustDecodePeerID(t), Username: "alice"}
 
-	startChat(context.Background(), strings.NewReader("partial"), publisher, "general", user, discardLogger(), io.Discard)
+	startChat(context.Background(), strings.NewReader("partial"), publisher, NewNoopStore(), NewMessageDeduper(8), "general", user, discardLogger(), io.Discard)
 
 	if len(publisher.messages) != 0 {
 		t.Fatalf("published messages = %d, want 0", len(publisher.messages))
@@ -74,7 +74,7 @@ func TestReceiveMessagesDeduplicatesByID(t *testing.T) {
 	}
 	var out bytes.Buffer
 
-	err = receiveMessages(ctx, sub, NewMessageDeduper(8), discardLogger(), &out)
+	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), discardLogger(), &out)
 	if err != context.Canceled {
 		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
 	}
@@ -118,6 +118,9 @@ func TestConfigWithDefaults(t *testing.T) {
 	}
 	if cfg.In == nil || cfg.Out == nil || cfg.Err == nil {
 		t.Fatal("default streams must be set")
+	}
+	if cfg.Store == nil {
+		t.Fatal("default store must be set")
 	}
 }
 

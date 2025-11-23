@@ -1,7 +1,10 @@
 package chat
 
+import "sync"
+
 type MessageDeduper struct {
 	limit int
+	mu    sync.Mutex
 	seen  map[string]struct{}
 	order []string
 }
@@ -18,6 +21,9 @@ func NewMessageDeduper(limit int) *MessageDeduper {
 }
 
 func (d *MessageDeduper) SeenOrAdd(id string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if _, ok := d.seen[id]; ok {
 		return true
 	}

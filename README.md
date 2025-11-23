@@ -32,6 +32,7 @@ go run ./cmd/p2p-chat -userName=Vasya
 - `-peer` — multiaddr пира для прямого подключения; можно указать несколько раз
 - `-relay` — multiaddr relay v2 пира для AutoRelay; можно указать несколько раз
 - `-noDHT` — отключить поиск пиров через Kademlia DHT
+- `--db-path` — путь к SQLite БД для истории сообщений и настроек
 
 При старте нода печатает свой `Peer ID` и список адресов. Любой адрес вида `/ip4/.../tcp/.../p2p/...` можно передать другой ноде через `-peer`.
 
@@ -50,6 +51,16 @@ go run ./cmd/p2p-chat -noDHT -topicName=local -userName=bob -peer /ip4/127.0.0.1
 ```
 
 После подключения сообщения, введенные в одном терминале, должны появляться в другом. На одной машине и в LAN также включен mDNS, поэтому локальные ноды часто находят друг друга автоматически.
+
+## SQLite
+
+SQLite включается явно:
+
+```sh
+go run ./cmd/p2p-chat -topicName=local -userName=alice --db-path ./p2p-chat.db
+```
+
+При старте применяются миграции, загружается последняя история комнаты, входящие и исходящие сообщения сохраняются идемпотентно по `message.id`, а настройки `last_room` и `last_username` пишутся в таблицу `settings`. Драйвер SQLite — `modernc.org/sqlite`, CGO не нужен.
 
 ## NAT traversal
 

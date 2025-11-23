@@ -15,6 +15,7 @@ type Config struct {
 	NoDHT     bool
 	Peers     []ma.Multiaddr
 	Relays    []ma.Multiaddr
+	Store     Store
 	In        io.Reader
 	Out       io.Writer
 	Err       io.Writer
@@ -32,6 +33,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.Err == nil {
 		c.Err = os.Stderr
+	}
+	if c.Store == nil {
+		c.Store = NewNoopStore()
 	}
 	return c
 }

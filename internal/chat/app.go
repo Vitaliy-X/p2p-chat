@@ -42,6 +42,9 @@ func Run(ctx context.Context, cfg Config) error {
 	if err := ValidateUsername(user.Username); err != nil {
 		return err
 	}
+	if err := saveRuntimeSettings(ctx, cfg.Store, cfg.TopicName, user.Username); err != nil {
+		logger.Println("Settings warning:", err)
+	}
 	printHostInfo(cfg.Out, h)
 
 	mdnsService, err := startMDNS(ctx, h, logger, cfg.Out)
@@ -72,9 +75,11 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	defer sub.Cancel()
 
-	go startChat(ctx, cfg.In, topic, cfg.TopicName, user, logger, cfg.Out)
+	deduper := NewMessageDeduper(4096)
+	printRoomHistory(ctx, cfg.Store, cfg.TopicName, DefaultHistoryLimit, logger, cfg.Out)
+	go startChat(ctx, cfg.In, topic, cfg.Store, deduper, cfg.TopicName, user, logger, cfg.Out)
 
-	if err := receiveMessages(ctx, sub, NewMessageDeduper(4096), logger, cfg.Out); err != nil {
+	if err := receiveMessages(ctx, sub, cfg.Store, deduper, logger, cfg.Out); err != nil {
 		return err
 	}
 	return nil
@@ -88,7 +93,7 @@ type messageSubscription interface {
 	Next(context.Context) (*pubsub.Message, error)
 }
 
-func startChat(ctx context.Context, in io.Reader, topic messagePublisher, room string, user User, logger *log.Logger, out io.Writer) {
+func startChat(ctx context.Context, in io.Reader, topic messagePublisher, store Store, deduper *MessageDeduper, room string, user User, logger *log.Logger, out io.Writer) {
 	fmt.Fprintln(out, "P2P chat launched")
 	reader := bufio.NewReader(in)
 	for {
@@ -105,7 +110,18 @@ func startChat(ctx context.Context, in io.Reader, topic messagePublisher, room s
 			}
 			return
 		}
-		data, err := packMessage(room, message, user)
+		chatMessage, err := NewChatMessage(room, message, user)
+		if err != nil {
+			logger.Println("Failed to create message:", err)
+			continue
+		}
+		if _, err := store.SaveMessage(ctx, chatMessage); err != nil {
+			logger.Println("Failed to save outgoing message:", err)
+		}
+		deduper.SeenOrAdd(chatMessage.ID)
+		fmt.Fprintf(out, "%s: %s", chatMessage.SenderUsername, chatMessage.Text)
+
+		data, err := EncodeChatMessage(chatMessage)
 		if err != nil {
 			logger.Println("Failed to encode message:", err)
 			continue
@@ -119,7 +135,7 @@ func startChat(ctx context.Context, in io.Reader, topic messagePublisher, room s
 	}
 }
 
-func receiveMessages(ctx context.Context, sub messageSubscription, deduper *MessageDeduper, logger *log.Logger, out io.Writer) error {
+func receiveMessages(ctx context.Context, sub messageSubscription, store Store, deduper *MessageDeduper, logger *log.Logger, out io.Writer) error {
 	for {
 		message, err := sub.Next(ctx)
 		if err != nil {
@@ -137,7 +153,41 @@ func receiveMessages(ctx context.Context, sub messageSubscription, deduper *Mess
 		if deduper.SeenOrAdd(chatMessage.ID) {
 			continue
 		}
+		inserted, err := store.SaveMessage(ctx, chatMessage)
+		if err != nil {
+			logger.Println("Failed to save incoming message:", err)
+		}
+		if !inserted {
+			if !message.Local {
+				continue
+			}
+		}
 
 		fmt.Fprintf(out, "%s: %s", chatMessage.SenderUsername, chatMessage.Text)
 	}
+}
+
+func printRoomHistory(ctx context.Context, store Store, room string, limit int, logger *log.Logger, out io.Writer) {
+	messages, err := store.MessagesByRoom(ctx, room, limit)
+	if err != nil {
+		logger.Println("History warning:", err)
+		return
+	}
+	if len(messages) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "History (%s):\n", room)
+	for _, message := range messages {
+		fmt.Fprintf(out, "[%s] %s: %s", message.SentAt.Local().Format("2006-01-02 15:04:05"), message.SenderUsername, message.Text)
+	}
+}
+
+func saveRuntimeSettings(ctx context.Context, store Store, room, username string) error {
+	if err := store.SetSetting(ctx, "last_room", room); err != nil {
+		return err
+	}
+	if err := store.SetSetting(ctx, "last_username", username); err != nil {
+		return err
+	}
+	return nil
 }

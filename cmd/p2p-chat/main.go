@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"p2p-chat/internal/chat"
+	sqlitestore "p2p-chat/internal/store/sqlite"
 )
 
 func main() {
@@ -19,6 +20,7 @@ func main() {
 	topicName := flag.String("topicName", chat.DefaultTopicName, "name of topic to join")
 	userName := flag.String("userName", "", "username to authenticate with")
 	noDHT := flag.Bool("noDHT", false, "disable Kademlia DHT peer discovery")
+	dbPath := flag.String("db-path", "", "SQLite database path for message history and settings")
 	flag.Var(&peerAddrs, "peer", "peer multiaddr to connect to; can be repeated")
 	flag.Var(&relayAddrs, "relay", "static relay multiaddr for AutoRelay; can be repeated")
 	flag.Parse()
@@ -26,12 +28,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	store := chat.NewNoopStore()
+	if *dbPath != "" {
+		sqliteStore, err := sqlitestore.Open(ctx, *dbPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer sqliteStore.Close()
+		store = sqliteStore
+	}
+
 	cfg := chat.Config{
 		TopicName: *topicName,
 		UserName:  *userName,
 		NoDHT:     *noDHT,
 		Peers:     peerAddrs.Addrs(),
 		Relays:    relayAddrs.Addrs(),
+		Store:     store,
 		In:        os.Stdin,
 		Out:       os.Stdout,
 		Err:       os.Stderr,
