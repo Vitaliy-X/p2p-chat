@@ -98,7 +98,7 @@ func TestEncodeDecodeChatMessage(t *testing.T) {
 	}
 }
 
-func TestDecodeChatMessageNormalizesStringFields(t *testing.T) {
+func TestDecodeNormalizesStrings(t *testing.T) {
 	id := mustDecodePeerID(t)
 	raw, err := json.Marshal(ChatMessage{
 		ID:             " msg_trimmed ",

@@ -50,7 +50,7 @@ func TestStartChatPublishesInputLine(t *testing.T) {
 	}
 }
 
-func TestStartChatDoesNotPublishPartialLineOnEOF(t *testing.T) {
+func TestStartChatSkipsPartialLine(t *testing.T) {
 	publisher := &fakePublisher{}
 	user := User{ID: mustDecodePeerID(t), Username: "alice"}
 
@@ -83,6 +83,29 @@ func TestReceiveMessagesDeduplicatesByID(t *testing.T) {
 	}
 }
 
+func TestReceiveMessagesDisplaysStoredMessage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	message := testMessage(t, "msg_existing", "alice", "hello\n")
+	data, err := EncodeChatMessage(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := &fakeSubscription{
+		messages: [][]byte{data},
+		cancel:   cancel,
+	}
+	store := fixedSaveStore{inserted: false}
+	var out bytes.Buffer
+
+	err = receiveMessages(ctx, sub, store, NewMessageDeduper(8), discardLogger(), &out)
+	if err != context.Canceled {
+		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
+	}
+	if got, want := out.String(), "alice: hello\n"; got != want {
+		t.Fatalf("out = %q, want %q", got, want)
+	}
+}
+
 type fakeSubscription struct {
 	messages [][]byte
 	cancel   context.CancelFunc
@@ -96,6 +119,26 @@ func (s *fakeSubscription) Next(ctx context.Context) (*pubsub.Message, error) {
 	data := s.messages[0]
 	s.messages = s.messages[1:]
 	return &pubsub.Message{Message: &pb.Message{Data: data}}, nil
+}
+
+type fixedSaveStore struct {
+	inserted bool
+}
+
+func (s fixedSaveStore) SaveMessage(context.Context, ChatMessage) (bool, error) {
+	return s.inserted, nil
+}
+
+func (fixedSaveStore) MessagesByRoom(context.Context, string, int) ([]ChatMessage, error) {
+	return nil, nil
+}
+
+func (fixedSaveStore) SetSetting(context.Context, string, string) error {
+	return nil
+}
+
+func (fixedSaveStore) GetSetting(context.Context, string) (string, bool, error) {
+	return "", false, nil
 }
 
 func testMessage(t *testing.T, id, username, text string) ChatMessage {

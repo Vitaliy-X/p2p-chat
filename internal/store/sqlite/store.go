@@ -3,12 +3,15 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"time"
 	"unicode/utf8"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 
 	"p2p-chat/internal/chat"
@@ -20,6 +23,9 @@ const (
 	maxSettingKeyLength = 128
 	maxSettingValLength = 8192
 )
+
+//go:embed migrations/*.sql
+var migrations embed.FS
 
 type Store struct {
 	db *sql.DB
@@ -64,51 +70,26 @@ func (s *Store) configure(ctx context.Context) error {
 }
 
 func (s *Store) Migrate(ctx context.Context) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	fsys, err := migrationFS()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version INTEGER PRIMARY KEY,
-		applied_at TEXT NOT NULL
-	)`); err != nil {
+	provider, err := goose.NewProvider(
+		goose.DialectSQLite3,
+		s.db,
+		fsys,
+		goose.WithTableName("goose_db_version"),
+		goose.WithDisableGlobalRegistry(true),
+	)
+	if err != nil {
 		return err
 	}
-
-	for _, migration := range migrations {
-		applied, err := migrationApplied(ctx, tx, migration.version)
-		if err != nil {
-			return err
-		}
-		if applied {
-			continue
-		}
-		for _, statement := range migration.statements {
-			if _, err := tx.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("migration %d: %w", migration.version, err)
-			}
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
-			migration.version,
-			nowString(),
-		); err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit()
+	_, err = provider.Up(ctx)
+	return err
 }
 
-func migrationApplied(ctx context.Context, tx *sql.Tx, version int) (bool, error) {
-	var n int
-	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, version).Scan(&n)
-	if err != nil {
-		return false, err
-	}
-	return n > 0, nil
+func migrationFS() (fs.FS, error) {
+	return fs.Sub(migrations, "migrations")
 }
 
 func (s *Store) SaveMessage(ctx context.Context, message chat.ChatMessage) (bool, error) {
@@ -221,7 +202,7 @@ func scanMessage(scanner messageScanner) (chat.ChatMessage, error) {
 	message.SentAt = parsedSentAt.UTC()
 
 	if err := message.Validate(); err != nil {
-		return chat.ChatMessage{}, err
+		return chat.ChatMessage{}, fmt.Errorf("stored message: %w", err)
 	}
 	return message, nil
 }

@@ -16,7 +16,7 @@ func TestHostOptionsWithoutRelays(t *testing.T) {
 	}
 }
 
-func TestHostOptionsRejectsRelayWithoutPeerID(t *testing.T) {
+func TestHostOptionsRequireRelayPeerID(t *testing.T) {
 	relay := mustMultiaddr(t, "/ip4/127.0.0.1/tcp/4001")
 	if _, err := hostOptions([]ma.Multiaddr{relay}); err == nil {
 		t.Fatal("expected relay without /p2p peer id to fail")

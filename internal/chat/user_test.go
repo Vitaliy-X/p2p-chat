@@ -2,7 +2,7 @@ package chat
 
 import "testing"
 
-func TestDefaultUserNameUsesSystemUserAndShortPeerID(t *testing.T) {
+func TestDefaultUserName(t *testing.T) {
 	id := mustDecodePeerID(t)
 
 	got := defaultUserName(id, "tester")

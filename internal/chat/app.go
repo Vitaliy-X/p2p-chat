@@ -153,14 +153,8 @@ func receiveMessages(ctx context.Context, sub messageSubscription, store Store, 
 		if deduper.SeenOrAdd(chatMessage.ID) {
 			continue
 		}
-		inserted, err := store.SaveMessage(ctx, chatMessage)
-		if err != nil {
+		if _, err := store.SaveMessage(ctx, chatMessage); err != nil {
 			logger.Println("Failed to save incoming message:", err)
-		}
-		if !inserted {
-			if !message.Local {
-				continue
-			}
 		}
 
 		fmt.Fprintf(out, "%s: %s", chatMessage.SenderUsername, chatMessage.Text)

@@ -29,7 +29,7 @@ func TestMultiaddrListSetStringAndAddrs(t *testing.T) {
 	}
 }
 
-func TestMultiaddrListSetRejectsInvalidAddress(t *testing.T) {
+func TestMultiaddrListRejectsInvalid(t *testing.T) {
 	var addrs MultiaddrList
 	if err := addrs.Set("not-a-multiaddr"); err == nil {
 		t.Fatal("expected invalid multiaddr to fail")
@@ -54,7 +54,7 @@ func TestAddrInfosFromP2PAddrs(t *testing.T) {
 	}
 }
 
-func TestAddrInfosFromP2PAddrsRejectsAddressWithoutPeerID(t *testing.T) {
+func TestAddrInfosRequirePeerID(t *testing.T) {
 	addr := mustMultiaddr(t, "/ip4/127.0.0.1/tcp/4001")
 	if _, err := addrInfosFromP2PAddrs([]ma.Multiaddr{addr}); err == nil {
 		t.Fatal("expected address without /p2p peer id to fail")

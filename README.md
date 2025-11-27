@@ -60,7 +60,7 @@ SQLite включается явно:
 go run ./cmd/p2p-chat -topicName=local -userName=alice --db-path ./p2p-chat.db
 ```
 
-При старте применяются миграции, загружается последняя история комнаты, входящие и исходящие сообщения сохраняются идемпотентно по `message.id`, а настройки `last_room` и `last_username` пишутся в таблицу `settings`. Драйвер SQLite — `modernc.org/sqlite`, CGO не нужен.
+При старте применяются миграции goose из `internal/store/sqlite/migrations`, загружается последняя история комнаты, входящие и исходящие сообщения сохраняются идемпотентно по `message.id`, а настройки `last_room` и `last_username` пишутся в таблицу `settings`. Драйвер SQLite — `modernc.org/sqlite`, CGO не нужен.
 
 ## NAT traversal
 
@@ -76,3 +76,5 @@ go run ./cmd/p2p-chat -topicName=local -userName=alice --db-path ./p2p-chat.db
 
 - `cmd/p2p-chat` — CLI entrypoint, флаги и graceful shutdown по Ctrl+C/SIGTERM
 - `internal/chat` — основная логика libp2p host, discovery, pubsub и сообщений
+- `internal/store/sqlite` — SQLite-адаптер хранения через `database/sql`
+- `internal/store/sqlite/migrations` — SQL-миграции goose, встроенные в бинарник

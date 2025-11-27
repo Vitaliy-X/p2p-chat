@@ -11,7 +11,7 @@ import (
 	"p2p-chat/internal/chat"
 )
 
-func TestStoreSaveMessageIsIdempotent(t *testing.T) {
+func TestSaveMessageIdempotent(t *testing.T) {
 	ctx := context.Background()
 	store := openTempStore(t, ctx)
 	defer store.Close()
@@ -45,7 +45,7 @@ func TestStoreSaveMessageIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestStoreMessagesByRoomReturnsLatestMessagesInChronologicalOrder(t *testing.T) {
+func TestRoomHistory(t *testing.T) {
 	ctx := context.Background()
 	store := openTempStore(t, ctx)
 	defer store.Close()
@@ -74,7 +74,7 @@ func TestStoreMessagesByRoomReturnsLatestMessagesInChronologicalOrder(t *testing
 	}
 }
 
-func TestStoreSettings(t *testing.T) {
+func TestSettings(t *testing.T) {
 	ctx := context.Background()
 	store := openTempStore(t, ctx)
 	defer store.Close()
@@ -110,7 +110,7 @@ func TestStoreSettings(t *testing.T) {
 	}
 }
 
-func TestStoreMigrationsAreIdempotent(t *testing.T) {
+func TestMigrateTwice(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "chat.db")
 
@@ -133,7 +133,7 @@ func TestStoreMigrationsAreIdempotent(t *testing.T) {
 	}
 }
 
-func TestStoreRejectsInvalidMessage(t *testing.T) {
+func TestSaveInvalidMessage(t *testing.T) {
 	ctx := context.Background()
 	store := openTempStore(t, ctx)
 	defer store.Close()

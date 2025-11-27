@@ -80,9 +80,6 @@ func initDHT(ctx context.Context, h host.Host, logger *log.Logger) (*dht.IpfsDHT
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DHT: %w", err)
 	}
-	if err = kademliaDHT.Bootstrap(ctx); err != nil {
-		return nil, fmt.Errorf("failed to bootstrap DHT: %w", err)
-	}
 
 	var wg sync.WaitGroup
 	for _, peerAddr := range dht.DefaultBootstrapPeers {
@@ -101,6 +98,10 @@ func initDHT(ctx context.Context, h host.Host, logger *log.Logger) (*dht.IpfsDHT
 	}
 	wg.Wait()
 
+	if err = kademliaDHT.Bootstrap(ctx); err != nil {
+		return nil, fmt.Errorf("failed to bootstrap DHT: %w", err)
+	}
+
 	return kademliaDHT, nil
 }
 
@@ -113,6 +114,7 @@ func searchPeers(ctx context.Context, h host.Host, topicName string, logger *log
 		return
 	}
 	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
+	fmt.Fprintln(out, "Advertising room with DHT...")
 	dutil.Advertise(ctx, routingDiscovery, topicName)
 
 	ticker := time.NewTicker(15 * time.Second)
