@@ -1,2 +1,10 @@
 /p2p-chat
 *.test
+*.db
+*.db-*
+/build/
+/cmd/p2p-chat-gui/build/
+cmd/p2p-chat-gui/frontend/dist/
+cmd/p2p-chat-gui/frontend/node_modules/
+cmd/p2p-chat-gui/frontend/package.json.md5
+cmd/p2p-chat-gui/frontend/wailsjs/

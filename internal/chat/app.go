@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -119,7 +120,7 @@ func startChat(ctx context.Context, in io.Reader, topic messagePublisher, store 
 			logger.Println("Failed to save outgoing message:", err)
 		}
 		deduper.SeenOrAdd(chatMessage.ID)
-		fmt.Fprintf(out, "%s: %s", chatMessage.SenderUsername, chatMessage.Text)
+		printChatLine(out, chatMessage.SenderUsername, chatMessage.Text)
 
 		data, err := EncodeChatMessage(chatMessage)
 		if err != nil {
@@ -157,7 +158,7 @@ func receiveMessages(ctx context.Context, sub messageSubscription, store Store, 
 			logger.Println("Failed to save incoming message:", err)
 		}
 
-		fmt.Fprintf(out, "%s: %s", chatMessage.SenderUsername, chatMessage.Text)
+		printChatLine(out, chatMessage.SenderUsername, chatMessage.Text)
 	}
 }
 
@@ -172,7 +173,7 @@ func printRoomHistory(ctx context.Context, store Store, room string, limit int, 
 	}
 	fmt.Fprintf(out, "History (%s):\n", room)
 	for _, message := range messages {
-		fmt.Fprintf(out, "[%s] %s: %s", message.SentAt.Local().Format("2006-01-02 15:04:05"), message.SenderUsername, message.Text)
+		printHistoryLine(out, message)
 	}
 }
 
@@ -184,4 +185,22 @@ func saveRuntimeSettings(ctx context.Context, store Store, room, username string
 		return err
 	}
 	return nil
+}
+
+func printChatLine(out io.Writer, username, text string) {
+	fmt.Fprintf(out, "%s: %s", username, text)
+	if !strings.HasSuffix(text, "\n") {
+		fmt.Fprintln(out)
+	}
+}
+
+func printHistoryLine(out io.Writer, message ChatMessage) {
+	fmt.Fprintf(out, "[%s] %s: %s",
+		message.SentAt.Local().Format("2006-01-02 15:04:05"),
+		message.SenderUsername,
+		message.Text,
+	)
+	if !strings.HasSuffix(message.Text, "\n") {
+		fmt.Fprintln(out)
+	}
 }

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -129,6 +130,21 @@ func TestMigrateTwice(t *testing.T) {
 	defer store.Close()
 
 	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenCreatesParentDir(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "nested", "chat.db")
+
+	store, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	}
 }

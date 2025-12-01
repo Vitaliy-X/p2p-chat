@@ -36,6 +36,25 @@ go run ./cmd/p2p-chat -userName=Vasya
 
 При старте нода печатает свой `Peer ID` и список адресов. Любой адрес вида `/ip4/.../tcp/.../p2p/...` можно передать другой ноде через `-peer`.
 
+## Desktop GUI
+
+Минимальный desktop-клиент сделан на Wails + Svelte + TypeScript:
+
+```sh
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+cd cmd/p2p-chat-gui
+wails dev
+```
+
+Сборка desktop-приложения:
+
+```sh
+cd cmd/p2p-chat-gui
+wails build
+```
+
+GUI использует те же libp2p/SQLite-слои, что и CLI: можно выбрать username, room, SQLite path, включить DHT discovery, подключиться вручную по multiaddr, скопировать peer info, отправлять сообщения и видеть историю комнаты.
+
 ## Локальная проверка
 
 В первом терминале:
@@ -75,6 +94,8 @@ go run ./cmd/p2p-chat -topicName=local -userName=alice --db-path ./p2p-chat.db
 ## Структура
 
 - `cmd/p2p-chat` — CLI entrypoint, флаги и graceful shutdown по Ctrl+C/SIGTERM
+- `cmd/p2p-chat-gui` — Wails desktop entrypoint и backend-адаптер
+- `cmd/p2p-chat-gui/frontend` — Svelte + TypeScript интерфейс
 - `internal/chat` — основная логика libp2p host, discovery, pubsub и сообщений
 - `internal/store/sqlite` — SQLite-адаптер хранения через `database/sql`
 - `internal/store/sqlite/migrations` — SQL-миграции goose, встроенные в бинарник

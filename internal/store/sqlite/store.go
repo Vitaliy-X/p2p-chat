@@ -7,6 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -35,6 +38,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if path == "" {
 		return nil, errors.New("sqlite db path is empty")
 	}
+	if err := ensureParentDir(path); err != nil {
+		return nil, err
+	}
 	db, err := sql.Open(driverName, path)
 	if err != nil {
 		return nil, err
@@ -49,6 +55,20 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, err
 	}
 	return store, nil
+}
+
+func ensureParentDir(path string) error {
+	if path == ":memory:" || strings.HasPrefix(path, "file:") {
+		return nil
+	}
+	dir := filepath.Dir(path)
+	if dir == "." || dir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create sqlite directory: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) Close() error {
