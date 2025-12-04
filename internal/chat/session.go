@@ -226,6 +226,13 @@ func (s *Session) PeerCount() int {
 	return count
 }
 
+func (s *Session) RoomPeerCount() int {
+	if s.topic == nil {
+		return 0
+	}
+	return len(s.topic.ListPeers())
+}
+
 func (s *Session) Close() error {
 	s.mu.Lock()
 	if s.closed {

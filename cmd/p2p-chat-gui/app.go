@@ -128,6 +128,7 @@ func (a *App) Send(text string) (MessageDTO, error) {
 		a.setError(err)
 		return MessageDTO{}, err
 	}
+	a.clearError()
 	return toMessageDTO(message), nil
 }
 
@@ -142,7 +143,7 @@ func (a *App) ManualConnect(addr string) error {
 		a.setError(err)
 		return err
 	}
-	a.emitStatus()
+	a.emitStatusClearError()
 	return nil
 }
 
@@ -158,7 +159,12 @@ func (a *App) CopyPeerInfo() error {
 	if text == "" {
 		text = info.ID
 	}
-	return runtime.ClipboardSetText(a.ctx, text)
+	if err := runtime.ClipboardSetText(a.ctx, text); err != nil {
+		a.setError(err)
+		return err
+	}
+	a.clearError()
+	return nil
 }
 
 func (a *App) Status() State {
@@ -225,6 +231,7 @@ func (a *App) stateLocked(messages []MessageDTO) State {
 	}
 	if a.session != nil {
 		state.PeerCount = a.session.PeerCount()
+		state.RoomPeerCount = a.session.RoomPeerCount()
 		state.PeerInfo = a.session.PeerInfo()
 	}
 	return state
@@ -233,6 +240,13 @@ func (a *App) stateLocked(messages []MessageDTO) State {
 func (a *App) emitStatus() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.emitStatusLocked(nil)
+}
+
+func (a *App) emitStatusClearError() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastErr = ""
 	a.emitStatusLocked(nil)
 }
 
@@ -248,6 +262,12 @@ func (a *App) setError(err error) {
 	defer a.mu.Unlock()
 	a.lastErr = err.Error()
 	a.emitStatusLocked(nil)
+}
+
+func (a *App) clearError() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastErr = ""
 }
 
 func resolveDBPath(path string) (string, error) {

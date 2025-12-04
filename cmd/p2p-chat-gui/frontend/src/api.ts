@@ -25,6 +25,7 @@ export interface State {
   status: string;
   last_error?: string;
   peer_count: number;
+  room_peer_count: number;
   peer_info: PeerInfo;
   messages?: Message[];
 }
@@ -57,6 +58,7 @@ let mockState: State = {
   connected: false,
   status: 'disconnected',
   peer_count: 0,
+  room_peer_count: 0,
   peer_info: { id: '', addresses: [] },
   messages: [],
 };
@@ -67,6 +69,7 @@ const mockAPI: AppAPI = {
       connected: true,
       status: 'connected',
       peer_count: 0,
+      room_peer_count: 0,
       peer_info: {
         id: 'dev-peer',
         addresses: [`/ip4/127.0.0.1/tcp/0/p2p/dev-peer`],
@@ -81,6 +84,7 @@ const mockAPI: AppAPI = {
       connected: false,
       status: 'disconnected',
       peer_count: 0,
+      room_peer_count: 0,
       peer_info: { id: '', addresses: [] },
       messages: [],
     };
@@ -99,7 +103,7 @@ const mockAPI: AppAPI = {
     return message;
   },
   async ManualConnect() {
-    mockState = { ...mockState, peer_count: 1 };
+    mockState = { ...mockState, peer_count: 1, room_peer_count: 1 };
   },
   async CopyPeerInfo() {},
   async Status() {

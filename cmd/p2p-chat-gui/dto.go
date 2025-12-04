@@ -17,12 +17,13 @@ type ConnectRequest struct {
 }
 
 type State struct {
-	Connected bool          `json:"connected"`
-	Status    string        `json:"status"`
-	LastError string        `json:"last_error,omitempty"`
-	PeerCount int           `json:"peer_count"`
-	PeerInfo  chat.PeerInfo `json:"peer_info"`
-	Messages  []MessageDTO  `json:"messages,omitempty"`
+	Connected     bool          `json:"connected"`
+	Status        string        `json:"status"`
+	LastError     string        `json:"last_error,omitempty"`
+	PeerCount     int           `json:"peer_count"`
+	RoomPeerCount int           `json:"room_peer_count"`
+	PeerInfo      chat.PeerInfo `json:"peer_info"`
+	Messages      []MessageDTO  `json:"messages,omitempty"`
 }
 
 type MessageDTO struct {

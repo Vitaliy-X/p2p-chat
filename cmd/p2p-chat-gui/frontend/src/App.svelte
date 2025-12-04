@@ -13,6 +13,7 @@
     connected: false,
     status: 'disconnected',
     peer_count: 0,
+    room_peer_count: 0,
     peer_info: { id: '', addresses: [] },
   };
   let busy = false;
@@ -85,8 +86,10 @@
     const text = draft.trim();
     if (!text || !state.connected) return;
     draft = '';
+    error = '';
     try {
       await api().Send(text);
+      error = '';
     } catch (err) {
       error = String(err);
     }
@@ -95,10 +98,12 @@
   async function manualConnect() {
     const value = manualAddr.trim();
     if (!value) return;
+    error = '';
     try {
       await api().ManualConnect(value);
       manualAddr = '';
       applyState(await api().Status());
+      error = '';
     } catch (err) {
       error = String(err);
     }
@@ -106,8 +111,10 @@
 
   async function copyPeerInfo() {
     if (!state.connected) return;
+    error = '';
     try {
       await api().CopyPeerInfo();
+      error = '';
       copied = true;
       setTimeout(() => (copied = false), 1200);
     } catch (err) {
@@ -125,7 +132,12 @@
     api().Status().then(applyState).catch((err) => (error = String(err)));
     const offMessage = onEvent<Message>('chat:message', addMessage);
     const offStatus = onEvent<State>('chat:status', applyState);
+    const statusTimer = window.setInterval(() => {
+      if (!state.connected) return;
+      api().Status().then(applyState).catch((err) => (error = String(err)));
+    }, 2000);
     return () => {
+      window.clearInterval(statusTimer);
       offMessage?.();
       offStatus?.();
     };
@@ -210,7 +222,7 @@
         <h2>{room || 'Room'}</h2>
         <p>{state.peer_info?.id || 'No local peer yet'}</p>
       </div>
-      <div class="peer-count">{state.peer_count}</div>
+      <div class="peer-count">{state.room_peer_count}</div>
     </header>
 
     <div class="messages" bind:this={messageList}>
