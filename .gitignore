@@ -1,4 +1,5 @@
 /p2p-chat
+.DS_Store
 *.test
 *.db
 *.db-*
