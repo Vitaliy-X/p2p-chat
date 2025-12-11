@@ -4,6 +4,7 @@
 
   let username = 'alice';
   let room = 'local';
+  let roomKey = '';
   let dbPath = 'p2p-chat-gui.db';
   let useDHT = true;
   let manualAddr = '';
@@ -57,6 +58,7 @@
       const next = await api().Connect({
         username,
         room,
+        room_key: roomKey,
         db_path: dbPath,
         no_dht: !useDHT,
       });
@@ -163,6 +165,16 @@
       <label>
         Room
         <input bind:value={room} disabled={state.connected || busy} autocomplete="off" />
+      </label>
+
+      <label>
+        Room key
+        <input
+          type="password"
+          bind:value={roomKey}
+          disabled={state.connected || busy}
+          autocomplete="off"
+        />
       </label>
 
       <label>

@@ -11,6 +11,7 @@ const DefaultTopicName = "my_applesauce"
 
 type Config struct {
 	TopicName string
+	RoomKey   string
 	UserName  string
 	NoDHT     bool
 	Peers     []ma.Multiaddr

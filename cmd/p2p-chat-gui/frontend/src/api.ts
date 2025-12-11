@@ -1,6 +1,7 @@
 export interface ConnectRequest {
   username: string;
   room: string;
+  room_key: string;
   db_path: string;
   no_dht: boolean;
 }

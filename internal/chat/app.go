@@ -19,6 +19,13 @@ func Run(ctx context.Context, cfg Config) error {
 	if err := ValidateRoom(cfg.TopicName); err != nil {
 		return err
 	}
+	if err := ValidateRoomKey(cfg.RoomKey); err != nil {
+		return err
+	}
+	privateTopic, err := privateRoomTopic(cfg.TopicName, cfg.RoomKey)
+	if err != nil {
+		return err
+	}
 	if cfg.UserName != "" {
 		if err := ValidateUsername(cfg.UserName); err != nil {
 			return err
@@ -48,7 +55,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	printHostInfo(cfg.Out, h)
 
-	mdnsService, err := startMDNS(ctx, h, logger, cfg.Out)
+	mdnsService, err := startMDNS(ctx, h, privateMDNSServiceName(privateTopic), logger, cfg.Out)
 	if err != nil {
 		logger.Println("mDNS warning:", err)
 	} else {
@@ -57,14 +64,14 @@ func Run(ctx context.Context, cfg Config) error {
 
 	connectToConfiguredPeers(ctx, h, cfg.Peers, logger, cfg.Out)
 	if !cfg.NoDHT {
-		go searchPeers(ctx, h, cfg.TopicName, logger, cfg.Out)
+		go searchPeers(ctx, h, privateTopic, logger, cfg.Out)
 	}
 
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub service: %w", err)
 	}
-	topic, err := ps.Join(cfg.TopicName)
+	topic, err := ps.Join(privateTopic)
 	if err != nil {
 		return fmt.Errorf("failed to join topic: %w", err)
 	}
@@ -80,7 +87,7 @@ func Run(ctx context.Context, cfg Config) error {
 	printRoomHistory(ctx, cfg.Store, cfg.TopicName, DefaultHistoryLimit, logger, cfg.Out)
 	go startChat(ctx, cfg.In, topic, cfg.Store, deduper, cfg.TopicName, user, logger, cfg.Out)
 
-	if err := receiveMessages(ctx, sub, cfg.Store, deduper, logger, cfg.Out); err != nil {
+	if err := receiveMessages(ctx, sub, cfg.Store, deduper, cfg.TopicName, logger, cfg.Out); err != nil {
 		return err
 	}
 	return nil
@@ -136,7 +143,7 @@ func startChat(ctx context.Context, in io.Reader, topic messagePublisher, store 
 	}
 }
 
-func receiveMessages(ctx context.Context, sub messageSubscription, store Store, deduper *MessageDeduper, logger *log.Logger, out io.Writer) error {
+func receiveMessages(ctx context.Context, sub messageSubscription, store Store, deduper *MessageDeduper, room string, logger *log.Logger, out io.Writer) error {
 	for {
 		message, err := sub.Next(ctx)
 		if err != nil {
@@ -149,6 +156,9 @@ func receiveMessages(ctx context.Context, sub messageSubscription, store Store, 
 		chatMessage, err := unpackMessage(message.Data)
 		if err != nil {
 			logger.Println("Failed to decode message:", err)
+			continue
+		}
+		if chatMessage.Room != room {
 			continue
 		}
 		if deduper.SeenOrAdd(chatMessage.ID) {

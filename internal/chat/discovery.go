@@ -29,8 +29,8 @@ func (n discoveryNotifee) HandlePeerFound(info peer.AddrInfo) {
 	connectToPeer(n.ctx, n.h, info, n.logger, n.out)
 }
 
-func startMDNS(ctx context.Context, h host.Host, logger *log.Logger, out io.Writer) (io.Closer, error) {
-	service := mdns.NewMdnsService(h, mdns.ServiceName, discoveryNotifee{
+func startMDNS(ctx context.Context, h host.Host, serviceName string, logger *log.Logger, out io.Writer) (io.Closer, error) {
+	service := mdns.NewMdnsService(h, serviceName, discoveryNotifee{
 		ctx:    ctx,
 		h:      h,
 		logger: logger,

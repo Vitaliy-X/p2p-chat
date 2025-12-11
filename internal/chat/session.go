@@ -19,6 +19,7 @@ import (
 
 type SessionConfig struct {
 	Room     string
+	RoomKey  string
 	Username string
 	NoDHT    bool
 	Peers    []ma.Multiaddr
@@ -74,6 +75,13 @@ func StartSession(ctx context.Context, cfg SessionConfig) (*Session, error) {
 	if err := ValidateRoom(room); err != nil {
 		return nil, err
 	}
+	if err := ValidateRoomKey(cfg.RoomKey); err != nil {
+		return nil, err
+	}
+	privateTopic, err := privateRoomTopic(room, cfg.RoomKey)
+	if err != nil {
+		return nil, err
+	}
 	if cfg.Username != "" {
 		cfg.Username = strings.TrimSpace(cfg.Username)
 		if err := ValidateUsername(cfg.Username); err != nil {
@@ -115,7 +123,7 @@ func StartSession(ctx context.Context, cfg SessionConfig) (*Session, error) {
 
 	s.watchPeers()
 
-	mdnsService, err := startMDNS(sessionCtx, h, cfg.Logger, io.Discard)
+	mdnsService, err := startMDNS(sessionCtx, h, privateMDNSServiceName(privateTopic), cfg.Logger, io.Discard)
 	if err != nil {
 		cfg.Logger.Println("mDNS warning:", err)
 	} else {
@@ -124,7 +132,7 @@ func StartSession(ctx context.Context, cfg SessionConfig) (*Session, error) {
 
 	connectToConfiguredPeers(sessionCtx, h, cfg.Peers, cfg.Logger, io.Discard)
 	if !cfg.NoDHT {
-		go searchPeers(sessionCtx, h, s.room, cfg.Logger, io.Discard)
+		go searchPeers(sessionCtx, h, privateTopic, cfg.Logger, io.Discard)
 	}
 
 	ps, err := pubsub.NewGossipSub(sessionCtx, h)
@@ -132,7 +140,7 @@ func StartSession(ctx context.Context, cfg SessionConfig) (*Session, error) {
 		s.Close()
 		return nil, fmt.Errorf("failed to create pubsub service: %w", err)
 	}
-	topic, err := ps.Join(s.room)
+	topic, err := ps.Join(privateTopic)
 	if err != nil {
 		s.Close()
 		return nil, fmt.Errorf("failed to join topic: %w", err)
@@ -273,6 +281,9 @@ func (s *Session) receive() {
 		chatMessage, err := unpackMessage(message.Data)
 		if err != nil {
 			s.logger.Println("Failed to decode message:", err)
+			continue
+		}
+		if chatMessage.Room != s.room {
 			continue
 		}
 		if s.deduper.SeenOrAdd(chatMessage.ID) {

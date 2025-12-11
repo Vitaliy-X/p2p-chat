@@ -51,6 +51,7 @@ func (a *App) Connect(req ConnectRequest) (State, error) {
 
 	req.Username = strings.TrimSpace(req.Username)
 	req.Room = strings.TrimSpace(req.Room)
+	req.RoomKey = strings.TrimSpace(req.RoomKey)
 	req.DBPath = strings.TrimSpace(req.DBPath)
 	if req.Room == "" {
 		req.Room = chat.DefaultTopicName
@@ -78,6 +79,7 @@ func (a *App) Connect(req ConnectRequest) (State, error) {
 	logger := log.New(os.Stderr, "", log.LstdFlags)
 	session, err := chat.StartSession(context.Background(), chat.SessionConfig{
 		Room:     req.Room,
+		RoomKey:  req.RoomKey,
 		Username: req.Username,
 		NoDHT:    req.NoDHT,
 		Store:    store,

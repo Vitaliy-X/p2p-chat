@@ -22,12 +22,13 @@
 Запустите чат с указанием имени пользователя:
 
 ```sh
-go run ./cmd/p2p-chat -userName=Vasya
+go run ./cmd/p2p-chat -userName=Vasya -room-key shared-secret
 ```
 
 Параметры:
 
 - `-topicName` — имя топика (по умолчанию: `my_applesauce`)
+- `-room-key` — общий ключ закрытой комнаты; можно передать через `P2P_CHAT_ROOM_KEY`
 - `-userName` — имя пользователя (по умолчанию: USER-<короткий peer id>)
 - `-peer` — multiaddr пира для прямого подключения; можно указать несколько раз
 - `-relay` — multiaddr relay v2 пира для AutoRelay; можно указать несколько раз
@@ -53,20 +54,20 @@ cd cmd/p2p-chat-gui
 wails build
 ```
 
-GUI использует те же libp2p/SQLite-слои, что и CLI: можно выбрать username, room, SQLite path, включить DHT discovery, подключиться вручную по multiaddr, скопировать peer info, отправлять сообщения и видеть историю комнаты.
+GUI использует те же libp2p/SQLite-слои, что и CLI: можно выбрать username, room, room key, SQLite path, включить DHT discovery, подключиться вручную по multiaddr, скопировать peer info, отправлять сообщения и видеть историю комнаты.
 
 ## Локальная проверка
 
 В первом терминале:
 
 ```sh
-go run ./cmd/p2p-chat -noDHT -topicName=local -userName=alice
+go run ./cmd/p2p-chat -noDHT -topicName=local -room-key shared-secret -userName=alice
 ```
 
 Во втором терминале используйте один из адресов первой ноды:
 
 ```sh
-go run ./cmd/p2p-chat -noDHT -topicName=local -userName=bob -peer /ip4/127.0.0.1/tcp/PORT/p2p/PEER_ID
+go run ./cmd/p2p-chat -noDHT -topicName=local -room-key shared-secret -userName=bob -peer /ip4/127.0.0.1/tcp/PORT/p2p/PEER_ID
 ```
 
 После подключения сообщения, введенные в одном терминале, должны появляться в другом. На одной машине и в LAN также включен mDNS, поэтому локальные ноды часто находят друг друга автоматически.
@@ -76,10 +77,16 @@ go run ./cmd/p2p-chat -noDHT -topicName=local -userName=bob -peer /ip4/127.0.0.1
 SQLite включается явно:
 
 ```sh
-go run ./cmd/p2p-chat -topicName=local -userName=alice --db-path ./p2p-chat.db
+go run ./cmd/p2p-chat -topicName=local -room-key shared-secret -userName=alice --db-path ./p2p-chat.db
 ```
 
 При старте применяются миграции goose из `internal/store/sqlite/migrations`, загружается последняя история комнаты, входящие и исходящие сообщения сохраняются идемпотентно по `message.id`, а настройки `last_room` и `last_username` пишутся в таблицу `settings`. Драйвер SQLite — `modernc.org/sqlite`, CGO не нужен.
+
+## Закрытые комнаты
+
+Комнаты закрываются общим `room-key`: сетевой pubsub topic, DHT discovery namespace и mDNS service name вычисляются через HMAC от имени комнаты и ключа. Клиент, который знает только `room=local`, но не знает ключ, не попадет в тот же topic и не увидит сообщения.
+
+`room-key` не сохраняется в SQLite settings. Используйте длинный случайный ключ для реальных комнат.
 
 ## NAT traversal
 

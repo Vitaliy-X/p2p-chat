@@ -18,6 +18,7 @@ func main() {
 	var relayAddrs chat.MultiaddrList
 
 	topicName := flag.String("topicName", chat.DefaultTopicName, "name of topic to join")
+	roomKey := flag.String("room-key", os.Getenv("P2P_CHAT_ROOM_KEY"), "shared room key; can also be set with P2P_CHAT_ROOM_KEY")
 	userName := flag.String("userName", "", "username to authenticate with")
 	noDHT := flag.Bool("noDHT", false, "disable Kademlia DHT peer discovery")
 	dbPath := flag.String("db-path", "", "SQLite database path for message history and settings")
@@ -40,6 +41,7 @@ func main() {
 
 	cfg := chat.Config{
 		TopicName: *topicName,
+		RoomKey:   *roomKey,
 		UserName:  *userName,
 		NoDHT:     *noDHT,
 		Peers:     peerAddrs.Addrs(),

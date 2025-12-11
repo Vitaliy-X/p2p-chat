@@ -74,7 +74,7 @@ func TestReceiveMessagesDeduplicatesByID(t *testing.T) {
 	}
 	var out bytes.Buffer
 
-	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), discardLogger(), &out)
+	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), "general", discardLogger(), &out)
 	if err != context.Canceled {
 		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
 	}
@@ -97,12 +97,35 @@ func TestReceiveMessagesDisplaysStoredMessage(t *testing.T) {
 	store := fixedSaveStore{inserted: false}
 	var out bytes.Buffer
 
-	err = receiveMessages(ctx, sub, store, NewMessageDeduper(8), discardLogger(), &out)
+	err = receiveMessages(ctx, sub, store, NewMessageDeduper(8), "general", discardLogger(), &out)
 	if err != context.Canceled {
 		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
 	}
 	if got, want := out.String(), "alice: hello\n"; got != want {
 		t.Fatalf("out = %q, want %q", got, want)
+	}
+}
+
+func TestReceiveMessagesSkipsOtherRooms(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	message := testMessage(t, "msg_other_room", "alice", "hello\n")
+	message.Room = "other"
+	data, err := EncodeChatMessage(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := &fakeSubscription{
+		messages: [][]byte{data},
+		cancel:   cancel,
+	}
+	var out bytes.Buffer
+
+	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), "general", discardLogger(), &out)
+	if err != context.Canceled {
+		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("out = %q, want empty", out.String())
 	}
 }
 

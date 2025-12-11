@@ -12,6 +12,7 @@ import (
 type ConnectRequest struct {
 	Username string `json:"username"`
 	Room     string `json:"room"`
+	RoomKey  string `json:"room_key"`
 	DBPath   string `json:"db_path"`
 	NoDHT    bool   `json:"no_dht"`
 }
