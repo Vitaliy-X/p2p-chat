@@ -85,9 +85,9 @@ func Run(ctx context.Context, cfg Config) error {
 
 	deduper := NewMessageDeduper(4096)
 	printRoomHistory(ctx, cfg.Store, cfg.TopicName, DefaultHistoryLimit, logger, cfg.Out)
-	go startChat(ctx, cfg.In, topic, cfg.Store, deduper, cfg.TopicName, user, logger, cfg.Out)
+	go startChat(ctx, cfg.In, topic, cfg.Store, deduper, cfg.TopicName, cfg.RoomKey, user, logger, cfg.Out)
 
-	if err := receiveMessages(ctx, sub, cfg.Store, deduper, cfg.TopicName, logger, cfg.Out); err != nil {
+	if err := receiveMessages(ctx, sub, cfg.Store, deduper, cfg.TopicName, cfg.RoomKey, logger, cfg.Out); err != nil {
 		return err
 	}
 	return nil
@@ -101,7 +101,7 @@ type messageSubscription interface {
 	Next(context.Context) (*pubsub.Message, error)
 }
 
-func startChat(ctx context.Context, in io.Reader, topic messagePublisher, store Store, deduper *MessageDeduper, room string, user User, logger *log.Logger, out io.Writer) {
+func startChat(ctx context.Context, in io.Reader, topic messagePublisher, store Store, deduper *MessageDeduper, room, roomKey string, user User, logger *log.Logger, out io.Writer) {
 	fmt.Fprintln(out, "P2P chat launched")
 	reader := bufio.NewReader(in)
 	for {
@@ -129,7 +129,7 @@ func startChat(ctx context.Context, in io.Reader, topic messagePublisher, store 
 		deduper.SeenOrAdd(chatMessage.ID)
 		printChatLine(out, chatMessage.SenderUsername, chatMessage.Text)
 
-		data, err := EncodeChatMessage(chatMessage)
+		data, err := sealMessage(chatMessage, roomKey)
 		if err != nil {
 			logger.Println("Failed to encode message:", err)
 			continue
@@ -143,7 +143,7 @@ func startChat(ctx context.Context, in io.Reader, topic messagePublisher, store 
 	}
 }
 
-func receiveMessages(ctx context.Context, sub messageSubscription, store Store, deduper *MessageDeduper, room string, logger *log.Logger, out io.Writer) error {
+func receiveMessages(ctx context.Context, sub messageSubscription, store Store, deduper *MessageDeduper, room, roomKey string, logger *log.Logger, out io.Writer) error {
 	for {
 		message, err := sub.Next(ctx)
 		if err != nil {
@@ -153,9 +153,9 @@ func receiveMessages(ctx context.Context, sub messageSubscription, store Store, 
 			logger.Println("Failed to read next message:", err)
 			continue
 		}
-		chatMessage, err := unpackMessage(message.Data)
+		chatMessage, err := openMessage(message.Data, room, roomKey)
 		if err != nil {
-			logger.Println("Failed to decode message:", err)
+			logger.Println("Failed to decrypt message:", err)
 			continue
 		}
 		if chatMessage.Room != room {

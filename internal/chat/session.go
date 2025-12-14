@@ -44,13 +44,14 @@ type Session struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	h      host.Host
-	topic  *pubsub.Topic
-	sub    *pubsub.Subscription
-	store  Store
-	room   string
-	user   User
-	logger *log.Logger
+	h       host.Host
+	topic   *pubsub.Topic
+	sub     *pubsub.Subscription
+	store   Store
+	room    string
+	roomKey string
+	user    User
+	logger  *log.Logger
 
 	deduper *MessageDeduper
 	events  chan SessionEvent
@@ -105,6 +106,7 @@ func StartSession(ctx context.Context, cfg SessionConfig) (*Session, error) {
 		h:       h,
 		store:   cfg.Store,
 		room:    room,
+		roomKey: strings.TrimSpace(cfg.RoomKey),
 		logger:  cfg.Logger,
 		deduper: NewMessageDeduper(4096),
 		events:  make(chan SessionEvent, 128),
@@ -176,7 +178,7 @@ func (s *Session) Send(ctx context.Context, text string) (ChatMessage, error) {
 	s.deduper.SeenOrAdd(message.ID)
 	s.emit(SessionEvent{Type: "message", Message: &message})
 
-	data, err := EncodeChatMessage(message)
+	data, err := sealMessage(message, s.roomKey)
 	if err != nil {
 		return ChatMessage{}, err
 	}
@@ -278,9 +280,9 @@ func (s *Session) receive() {
 			s.logger.Println("Failed to read next message:", err)
 			continue
 		}
-		chatMessage, err := unpackMessage(message.Data)
+		chatMessage, err := openMessage(message.Data, s.room, s.roomKey)
 		if err != nil {
-			s.logger.Println("Failed to decode message:", err)
+			s.logger.Println("Failed to decrypt message:", err)
 			continue
 		}
 		if chatMessage.Room != s.room {

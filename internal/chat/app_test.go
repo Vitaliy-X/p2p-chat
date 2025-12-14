@@ -27,7 +27,7 @@ func TestStartChatPublishesInputLine(t *testing.T) {
 	user := User{ID: mustDecodePeerID(t), Username: "alice"}
 	var out bytes.Buffer
 
-	startChat(context.Background(), strings.NewReader("hello\n"), publisher, NewNoopStore(), NewMessageDeduper(8), "general", user, discardLogger(), &out)
+	startChat(context.Background(), strings.NewReader("hello\n"), publisher, NewNoopStore(), NewMessageDeduper(8), "general", "shared-secret", user, discardLogger(), &out)
 
 	if got, want := out.String(), "P2P chat launched\nalice: hello\n"; got != want {
 		t.Fatalf("out = %q, want %q", got, want)
@@ -35,7 +35,7 @@ func TestStartChatPublishesInputLine(t *testing.T) {
 	if len(publisher.messages) != 1 {
 		t.Fatalf("published messages = %d, want 1", len(publisher.messages))
 	}
-	message, err := unpackMessage(publisher.messages[0])
+	message, err := openMessage(publisher.messages[0], "general", "shared-secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestStartChatSkipsPartialLine(t *testing.T) {
 	publisher := &fakePublisher{}
 	user := User{ID: mustDecodePeerID(t), Username: "alice"}
 
-	startChat(context.Background(), strings.NewReader("partial"), publisher, NewNoopStore(), NewMessageDeduper(8), "general", user, discardLogger(), io.Discard)
+	startChat(context.Background(), strings.NewReader("partial"), publisher, NewNoopStore(), NewMessageDeduper(8), "general", "shared-secret", user, discardLogger(), io.Discard)
 
 	if len(publisher.messages) != 0 {
 		t.Fatalf("published messages = %d, want 0", len(publisher.messages))
@@ -64,7 +64,7 @@ func TestStartChatSkipsPartialLine(t *testing.T) {
 func TestReceiveMessagesDeduplicatesByID(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	message := testMessage(t, "msg_duplicate", "alice", "hello\n")
-	data, err := EncodeChatMessage(message)
+	data, err := sealMessage(message, "shared-secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestReceiveMessagesDeduplicatesByID(t *testing.T) {
 	}
 	var out bytes.Buffer
 
-	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), "general", discardLogger(), &out)
+	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), "general", "shared-secret", discardLogger(), &out)
 	if err != context.Canceled {
 		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
 	}
@@ -86,7 +86,7 @@ func TestReceiveMessagesDeduplicatesByID(t *testing.T) {
 func TestReceiveMessagesDisplaysStoredMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	message := testMessage(t, "msg_existing", "alice", "hello\n")
-	data, err := EncodeChatMessage(message)
+	data, err := sealMessage(message, "shared-secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestReceiveMessagesDisplaysStoredMessage(t *testing.T) {
 	store := fixedSaveStore{inserted: false}
 	var out bytes.Buffer
 
-	err = receiveMessages(ctx, sub, store, NewMessageDeduper(8), "general", discardLogger(), &out)
+	err = receiveMessages(ctx, sub, store, NewMessageDeduper(8), "general", "shared-secret", discardLogger(), &out)
 	if err != context.Canceled {
 		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
 	}
@@ -110,7 +110,7 @@ func TestReceiveMessagesSkipsOtherRooms(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	message := testMessage(t, "msg_other_room", "alice", "hello\n")
 	message.Room = "other"
-	data, err := EncodeChatMessage(message)
+	data, err := sealMessage(message, "shared-secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestReceiveMessagesSkipsOtherRooms(t *testing.T) {
 	}
 	var out bytes.Buffer
 
-	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), "general", discardLogger(), &out)
+	err = receiveMessages(ctx, sub, NewNoopStore(), NewMessageDeduper(8), "general", "shared-secret", discardLogger(), &out)
 	if err != context.Canceled {
 		t.Fatalf("receiveMessages() error = %v, want context.Canceled", err)
 	}

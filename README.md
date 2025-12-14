@@ -86,7 +86,9 @@ go run ./cmd/p2p-chat -topicName=local -room-key shared-secret -userName=alice -
 
 Комнаты закрываются общим `room-key`: сетевой pubsub topic, DHT discovery namespace и mDNS service name вычисляются через HMAC от имени комнаты и ключа. Клиент, который знает только `room=local`, но не знает ключ, не попадет в тот же topic и не увидит сообщения.
 
-`room-key` не сохраняется в SQLite settings. Используйте длинный случайный ключ для реальных комнат.
+Сообщения в pubsub шифруются через AES-256-GCM, ключ шифрования выводится из `room-key` и имени комнаты. `room-key` не сохраняется в SQLite settings. Используйте длинный случайный ключ для реальных комнат.
+
+SQLite-история пока хранит уже расшифрованный текст сообщений локально.
 
 ## NAT traversal
 
