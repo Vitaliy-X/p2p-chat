@@ -82,13 +82,15 @@ go run ./cmd/p2p-chat -topicName=local -room-key shared-secret -userName=alice -
 
 При старте применяются миграции goose из `internal/store/sqlite/migrations`, загружается последняя история комнаты, входящие и исходящие сообщения сохраняются идемпотентно по `message.id`, а настройки `last_room` и `last_username` пишутся в таблицу `settings`. Драйвер SQLite — `modernc.org/sqlite`, CGO не нужен.
 
+SQLite-схема разделяет комнаты и сообщения: `rooms` хранит комнаты и salt, `messages` хранит метаданные сообщения и зашифрованный payload. Текст сообщения и `sender_username` шифруются через AES-256-GCM ключом, выведенным из `room-key`, имени комнаты и per-room salt через Argon2id. При переходе со старой plaintext-схемы старые сообщения не переносятся, потому что миграция не знает `room-key`.
+
 ## Закрытые комнаты
 
 Комнаты закрываются общим `room-key`: сетевой pubsub topic, DHT discovery namespace и mDNS service name вычисляются через HMAC от имени комнаты и ключа. Клиент, который знает только `room=local`, но не знает ключ, не попадет в тот же topic и не увидит сообщения.
 
 Сообщения в pubsub шифруются через AES-256-GCM, ключ шифрования выводится из `room-key` и имени комнаты. `room-key` не сохраняется в SQLite settings. Используйте длинный случайный ключ для реальных комнат.
 
-SQLite-история пока хранит уже расшифрованный текст сообщений локально.
+SQLite-история хранит зашифрованный payload сообщений. Для индексов и загрузки истории в БД остаются plaintext-метаданные: `message.id`, room metadata, `sender_id`, `sent_at`, `version`, `received_at`.
 
 ## NAT traversal
 

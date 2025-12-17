@@ -31,6 +31,9 @@ func Run(ctx context.Context, cfg Config) error {
 			return err
 		}
 	}
+	if err := ConfigureStoreRoomKey(ctx, cfg.Store, cfg.TopicName, cfg.RoomKey); err != nil {
+		return err
+	}
 
 	opts, err := hostOptions(cfg.Relays)
 	if err != nil {

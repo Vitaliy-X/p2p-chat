@@ -89,6 +89,9 @@ func StartSession(ctx context.Context, cfg SessionConfig) (*Session, error) {
 			return nil, err
 		}
 	}
+	if err := ConfigureStoreRoomKey(ctx, cfg.Store, room, cfg.RoomKey); err != nil {
+		return nil, err
+	}
 
 	opts, err := hostOptions(cfg.Relays)
 	if err != nil {

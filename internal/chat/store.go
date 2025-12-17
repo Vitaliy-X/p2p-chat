@@ -14,6 +14,10 @@ type Store interface {
 	GetSetting(ctx context.Context, key string) (string, bool, error)
 }
 
+type RoomKeyStore interface {
+	SetRoomKey(ctx context.Context, room, key string) error
+}
+
 type noopStore struct{}
 
 func NewNoopStore() Store {
@@ -42,4 +46,12 @@ func CloseStore(store Store) error {
 		return nil
 	}
 	return closer.Close()
+}
+
+func ConfigureStoreRoomKey(ctx context.Context, store Store, room, key string) error {
+	keyStore, ok := store.(RoomKeyStore)
+	if !ok {
+		return nil
+	}
+	return keyStore.SetRoomKey(ctx, room, key)
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -32,6 +33,9 @@ var migrations embed.FS
 
 type Store struct {
 	db *sql.DB
+
+	mu       sync.RWMutex
+	roomKeys map[string][]byte
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -45,7 +49,10 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{db: db}
+	store := &Store{
+		db:       db,
+		roomKeys: make(map[string][]byte),
+	}
 	if err := store.configure(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -79,6 +86,7 @@ func (s *Store) configure(ctx context.Context) error {
 	pragmas := []string{
 		`PRAGMA foreign_keys = ON`,
 		`PRAGMA busy_timeout = 5000`,
+		`PRAGMA secure_delete = ON`,
 		`PRAGMA journal_mode = WAL`,
 	}
 	for _, pragma := range pragmas {
@@ -116,27 +124,49 @@ func (s *Store) SaveMessage(ctx context.Context, message chat.ChatMessage) (bool
 	if err := message.Validate(); err != nil {
 		return false, err
 	}
-	result, err := s.db.ExecContext(ctx, `INSERT INTO messages(
+
+	nonce, ciphertext, err := s.sealMessage(message)
+	if err != nil {
+		return false, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	roomID, _, err := ensureRoom(ctx, tx, message.Room)
+	if err != nil {
+		return false, err
+	}
+
+	result, err := tx.ExecContext(ctx, `INSERT INTO messages(
 		id,
-		room,
-		text,
+		room_id,
 		sender_id,
-		sender_username,
 		sent_at,
 		version,
-		received_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		received_at,
+		encryption_version,
+		nonce,
+		ciphertext
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO NOTHING`,
 		message.ID,
-		message.Room,
-		message.Text,
+		roomID,
 		message.SenderID.String(),
-		message.SenderUsername,
 		message.SentAt.UTC().Format(time.RFC3339Nano),
 		message.Version,
 		nowString(),
+		dbEncryptionVersion,
+		nonce,
+		ciphertext,
 	)
 	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	affected, err := result.RowsAffected()
@@ -144,6 +174,66 @@ func (s *Store) SaveMessage(ctx context.Context, message chat.ChatMessage) (bool
 		return false, err
 	}
 	return affected > 0, nil
+}
+
+func ensureRoom(ctx context.Context, tx *sql.Tx, room string) (int64, string, error) {
+	salt, err := newRoomKeySalt()
+	if err != nil {
+		return 0, "", err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO rooms(name, created_at, key_salt)
+	VALUES (?, ?, ?)
+	ON CONFLICT(name) DO NOTHING`,
+		room,
+		nowString(),
+		salt,
+	); err != nil {
+		return 0, "", err
+	}
+	var id int64
+	err = tx.QueryRowContext(ctx, `SELECT id, key_salt FROM rooms WHERE name = ?`, room).Scan(&id, &salt)
+	if err != nil {
+		return 0, "", err
+	}
+	return id, salt, nil
+}
+
+func (s *Store) SetRoomKey(ctx context.Context, room, key string) error {
+	if err := chat.ValidateRoom(room); err != nil {
+		return err
+	}
+	if err := chat.ValidateRoomKey(key); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, salt, err := ensureRoom(ctx, tx, room)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	derivedKey, err := deriveDBKey(room, key, salt)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.roomKeys[room] = derivedKey
+	s.mu.Unlock()
+
+	if err := s.verifyRoomKey(ctx, room); err != nil {
+		s.mu.Lock()
+		delete(s.roomKeys, room)
+		s.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 func (s *Store) MessagesByRoom(ctx context.Context, room string, limit int) ([]chat.ChatMessage, error) {
@@ -157,16 +247,26 @@ func (s *Store) MessagesByRoom(ctx context.Context, room string, limit int) ([]c
 	rows, err := s.db.QueryContext(ctx, `SELECT
 		id,
 		room,
-		text,
 		sender_id,
-		sender_username,
 		sent_at,
-		version
+		version,
+		encryption_version,
+		nonce,
+		ciphertext
 	FROM (
-		SELECT id, room, text, sender_id, sender_username, sent_at, version
-		FROM messages
-		WHERE room = ?
-		ORDER BY sent_at DESC, id DESC
+		SELECT
+			m.id,
+			r.name AS room,
+			m.sender_id,
+			m.sent_at,
+			m.version,
+			m.encryption_version,
+			m.nonce,
+			m.ciphertext
+		FROM messages m
+		JOIN rooms r ON r.id = m.room_id
+		WHERE r.name = ?
+		ORDER BY m.sent_at DESC, m.id DESC
 		LIMIT ?
 	)
 	ORDER BY sent_at ASC, id ASC`, room, limit)
@@ -177,7 +277,7 @@ func (s *Store) MessagesByRoom(ctx context.Context, room string, limit int) ([]c
 
 	var messages []chat.ChatMessage
 	for rows.Next() {
-		message, err := scanMessage(rows)
+		message, err := s.scanMessage(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -193,18 +293,22 @@ type messageScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanMessage(scanner messageScanner) (chat.ChatMessage, error) {
+func (s *Store) scanMessage(scanner messageScanner) (chat.ChatMessage, error) {
 	var message chat.ChatMessage
 	var senderID string
 	var sentAt string
+	var encryptionVersion int
+	var nonce sql.NullString
+	var ciphertext sql.NullString
 	if err := scanner.Scan(
 		&message.ID,
 		&message.Room,
-		&message.Text,
 		&senderID,
-		&message.SenderUsername,
 		&sentAt,
 		&message.Version,
+		&encryptionVersion,
+		&nonce,
+		&ciphertext,
 	); err != nil {
 		return chat.ChatMessage{}, err
 	}
@@ -220,6 +324,19 @@ func scanMessage(scanner messageScanner) (chat.ChatMessage, error) {
 		return chat.ChatMessage{}, err
 	}
 	message.SentAt = parsedSentAt.UTC()
+
+	if encryptionVersion != dbEncryptionVersion {
+		return chat.ChatMessage{}, fmt.Errorf("unsupported sqlite message encryption version %d", encryptionVersion)
+	}
+	if !nonce.Valid || !ciphertext.Valid {
+		return chat.ChatMessage{}, errors.New("encrypted message payload is missing")
+	}
+	payload, err := s.openMessagePayload(message, nonce.String, ciphertext.String)
+	if err != nil {
+		return chat.ChatMessage{}, err
+	}
+	message.Text = payload.Text
+	message.SenderUsername = payload.SenderUsername
 
 	if err := message.Validate(); err != nil {
 		return chat.ChatMessage{}, fmt.Errorf("stored message: %w", err)
