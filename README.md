@@ -4,6 +4,12 @@ P2P-чат на Go/libp2p с desktop GUI на Wails и CLI.
 
 ## GUI
 
+Графический интерфейс позволяет пользоваться чатом как обычным desktop-приложением.
+
+<p align="center">
+  <img src="docs/images/gui-main.png" alt="P2P Chat GUI" width="2940"/>
+</p>
+
 Запуск в dev-режиме:
 
 ```sh
